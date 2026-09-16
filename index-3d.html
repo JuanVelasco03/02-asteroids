@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Asteroids 3D</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      background: #000;
+      height: 100%;
+      overflow: hidden;
+      font-family: monospace;
+    }
+    #container {
+      position: relative;
+      width: 900px;
+      height: 700px;
+      margin: 0 auto;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+    canvas { display: block; border: 1px solid #222; }
+
+    #hud {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      color: #fff;
+    }
+    #hud .score  { position: absolute; top: 14px; left: 16px; font-size: 16px; }
+    #hud .level  { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); font-size: 16px; }
+    #hud .lives  { position: absolute; top: 14px; right: 16px; font-size: 16px; }
+    #hud .triple { position: absolute; top: 40px; left: 16px; font-size: 14px; color: #0ff; }
+    #hud .shield {
+      position: absolute; top: 40px; right: 16px; font-size: 14px; color: #6cf;
+      display: none;
+    }
+    #hud .boost {
+      position: absolute;
+      bottom: 20px; left: 16px;
+      width: 160px; height: 10px;
+      border: 1px solid rgba(255,255,255,0.5);
+    }
+    #hud .boost-fill {
+      height: 100%;
+      width: 100%;
+      background: #6cf;
+      transition: background 0.15s;
+    }
+    #hud .boost-label { position: absolute; bottom: 32px; left: 16px; font-size: 11px; color: rgba(255,255,255,0.7); }
+    #hud .nova {
+      position: absolute; bottom: 48px; left: 16px; font-size: 13px; color: #ff5522; font-weight: bold;
+    }
+
+    #novaFlash {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(circle, rgba(255,120,60,0.9) 0%, rgba(255,60,20,0.5) 45%, rgba(255,60,20,0) 75%);
+      opacity: 0;
+    }
+
+    #minimap {
+      position: absolute;
+      bottom: 16px; right: 16px;
+      width: 160px; height: 160px;
+      border-radius: 50%;
+      border: 1px solid rgba(120,200,255,0.6);
+      background: rgba(0,15,25,0.55);
+    }
+    #minimap-label {
+      position: absolute;
+      bottom: 178px; right: 16px;
+      width: 160px;
+      text-align: center;
+      font-size: 11px;
+      color: rgba(255,255,255,0.7);
+    }
+
+    /* Marco de cabina: viñeta + mira central para sensación de "estar dentro" */
+    #cockpit {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      box-shadow: inset 0 0 140px 40px rgba(0,0,0,0.85);
+      border: 3px solid rgba(255,255,255,0.06);
+    }
+    #reticle {
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 16px; height: 16px;
+      margin: -8px 0 0 -8px;
+      pointer-events: none;
+    }
+    #reticle::before, #reticle::after {
+      content: '';
+      position: absolute;
+      background: rgba(255,255,255,0.5);
+    }
+    #reticle::before { top: 7px; left: 0; width: 16px; height: 2px; }
+    #reticle::after   { left: 7px; top: 0; width: 2px; height: 16px; }
+
+    #overlay {
+      position: absolute;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      text-align: center;
+      background: rgba(0,0,0,0.35);
+    }
+    #overlay.show { display: flex; }
+    #overlay .title { font-size: 46px; font-weight: bold; margin-bottom: 14px; }
+    #overlay .sub   { font-size: 18px; color: rgba(255,255,255,0.65); }
+
+    #lockHint {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      text-align: center;
+      background: rgba(0,0,0,0.55);
+      cursor: pointer;
+      font-size: 16px;
+      z-index: 10;
+    }
+    #lockHint .big { font-size: 22px; font-weight: bold; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <div id="hud">
+      <div class="score">SCORE 0</div>
+      <div class="level">NIVEL 1</div>
+      <div class="lives">|||</div>
+      <div class="triple"></div>
+      <div class="shield">ESCUDO</div>
+      <div class="boost-label">TURBO</div>
+      <div class="boost"><div class="boost-fill"></div></div>
+      <div class="nova"></div>
+    </div>
+    <div id="cockpit"></div>
+    <div id="reticle"></div>
+    <div id="novaFlash"></div>
+    <div id="minimap-label">RADAR</div>
+    <canvas id="minimap" width="160" height="160"></canvas>
+    <div id="overlay">
+      <div class="title">GAME OVER</div>
+      <div class="sub">ESPACIO PARA REINICIAR</div>
+    </div>
+    <div id="lockHint">
+      <div class="big">CLIC PARA JUGAR</div>
+      <div>Mueve el mouse para mirar · Clic izquierdo dispara · Clic derecho mira atrás · WASD para moverte · Shift turbo · F bomba nova</div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+  <script src="game-3d.js"></script>
+</body>
+</html>
