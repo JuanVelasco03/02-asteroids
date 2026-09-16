@@ -9,9 +9,36 @@
     body {
       background: #000;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
+      gap: 14px;
       height: 100vh;
+      font-family: monospace;
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .topbar h1 {
+      color: #fff;
+      font-size: 22px;
+      letter-spacing: 4px;
+      font-weight: normal;
+    }
+    .switch-btn {
+      color: #fff;
+      text-decoration: none;
+      border: 1px solid rgba(255,255,255,0.5);
+      padding: 8px 14px;
+      font-size: 13px;
+      letter-spacing: 1px;
+      transition: background 0.15s, color 0.15s;
+    }
+    .switch-btn:hover {
+      background: #fff;
+      color: #000;
     }
     canvas {
       display: block;
@@ -20,6 +47,10 @@
   </style>
 </head>
 <body>
+  <div class="topbar">
+    <h1>ASTEROIDS</h1>
+    <a class="switch-btn" href="index-3d.html">JUGAR VERSIÓN 3D →</a>
+  </div>
   <canvas id="canvas" width="800" height="600"></canvas>
   <script src="game.js"></script>
 </body>

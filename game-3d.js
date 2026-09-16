@@ -1,8 +1,10 @@
 'use strict';
 
 // Versión 3D del mismo juego (ver game.js para la versión 2D original).
-// Misma lógica de arena toroidal, colisiones por círculo/esfera y estilo
-// directo con estado global, pero renderizada con Three.js en vez de Canvas 2D.
+// A diferencia del 2D, la arena aquí es acotada (con paredes invisibles):
+// la nave y los asteroides rebotan/chocan en los bordes en vez de dar la
+// vuelta al mundo. Colisiones por círculo/esfera, estado global directo,
+// renderizado con Three.js en vez de Canvas 2D.
 
 const W = 800;   // ancho lógico de la arena (eje X)
 const H = 600;   // "alto" lógico de la arena (eje Z en el mundo 3D)
@@ -26,7 +28,6 @@ window.addEventListener('keyup', (e) => {
 });
 
 // ── Utils ─────────────────────────────────────────────────────────────────────
-const wrap  = (v, max) => ((v % max) + max) % max;
 const dist  = (a, b)   => Math.hypot(a.x - b.x, a.z - b.z);
 const rand  = (min, max) => min + Math.random() * (max - min);
 const randInt = (min, max) => Math.floor(rand(min, max + 1));
@@ -184,8 +185,19 @@ class Bullet {
   }
 
   update(dt) {
-    this.x = wrap(this.x + this.vx * dt, W);
-    this.z = wrap(this.z + this.vz * dt, H);
+    const nx = this.x + this.vx * dt;
+    const nz = this.z + this.vz * dt;
+
+    // Las balas ya no dan la vuelta al mundo: al llegar al borde de la
+    // arena explotan (desaparecen), no se teletransportan al otro lado.
+    if (nx < 0 || nx > W || nz < 0 || nz > H) {
+      this.dead = true;
+      explode(Math.min(Math.max(nx, 0), W), Math.min(Math.max(nz, 0), H), 3);
+      return;
+    }
+
+    this.x = nx;
+    this.z = nz;
     this.ttl -= dt;
     if (this.ttl <= 0) this.dead = true;
     placeMesh(this.mesh, this);
@@ -233,8 +245,19 @@ class Asteroid {
   }
 
   update(dt) {
-    this.x = wrap(this.x + this.vx * dt, W);
-    this.z = wrap(this.z + this.vz * dt, H);
+    // A diferencia de antes, los asteroides ya no dan la vuelta al mundo:
+    // rebotan contra el borde de la arena (como si fuera una pared) en vez
+    // de teletransportarse al lado opuesto.
+    let nx = this.x + this.vx * dt;
+    let nz = this.z + this.vz * dt;
+    const r = this.radius;
+    if (nx < r)     { nx = r;     this.vx = -this.vx; }
+    if (nx > W - r) { nx = W - r; this.vx = -this.vx; }
+    if (nz < r)     { nz = r;     this.vz = -this.vz; }
+    if (nz > H - r) { nz = H - r; this.vz = -this.vz; }
+    this.x = nx;
+    this.z = nz;
+
     this.mesh.rotation.x += this.rotSpeed.x * dt;
     this.mesh.rotation.y += this.rotSpeed.y * dt;
     this.mesh.rotation.z += this.rotSpeed.z * dt;
@@ -252,6 +275,77 @@ class Asteroid {
   remove() { scene.remove(this.mesh); }
 }
 
+// ── Íconos de power-up (imágenes dibujadas a mano, estilo del juego) ─────────
+// Cada tipo de power-up se distingue con una imagen (sprite que siempre mira
+// a la cámara) dibujada sobre un canvas: el disparo triple muestra el
+// abanico de 3 balas, la bomba nova muestra una estrella/explosión.
+function makeIconTexture(draw) {
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  draw(canvas.getContext('2d'), size);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+const tripleIconTexture = makeIconTexture((ctx, s) => {
+  const c = s / 2;
+  const glow = ctx.createRadialGradient(c, c, 8, c, c, s * 0.42);
+  glow.addColorStop(0, 'rgba(0,255,255,0.55)');
+  glow.addColorStop(1, 'rgba(0,255,255,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(c, c, s * 0.42, 0, Math.PI * 2); ctx.fill();
+
+  const originY = s * 0.82;
+  const tips = [[c - s * 0.22, s * 0.20], [c, s * 0.12], [c + s * 0.22, s * 0.20]];
+  ctx.strokeStyle = '#eafcff';
+  ctx.lineWidth = 6;
+  ctx.lineCap = 'round';
+  for (const [tx, ty] of tips) {
+    ctx.beginPath();
+    ctx.moveTo(c, originY);
+    ctx.lineTo(tx, ty);
+    ctx.stroke();
+    ctx.fillStyle = '#00eaff';
+    ctx.beginPath();
+    ctx.arc(tx, ty, 7, 0, Math.PI * 2);
+    ctx.fill();
+  }
+});
+
+const novaIconTexture = makeIconTexture((ctx, s) => {
+  const c = s / 2;
+  const glow = ctx.createRadialGradient(c, c, 8, c, c, s * 0.46);
+  glow.addColorStop(0, 'rgba(255,120,40,0.6)');
+  glow.addColorStop(1, 'rgba(255,80,20,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(c, c, s * 0.46, 0, Math.PI * 2); ctx.fill();
+
+  const spikes = 8, outerR = s * 0.36, innerR = s * 0.15;
+  ctx.beginPath();
+  for (let i = 0; i < spikes * 2; i++) {
+    const r = i % 2 === 0 ? outerR : innerR;
+    const a = (i / (spikes * 2)) * Math.PI * 2 - Math.PI / 2;
+    const px = c + Math.cos(a) * r, py = c + Math.sin(a) * r;
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fillStyle = '#ff6a2e';
+  ctx.fill();
+  ctx.strokeStyle = '#fff2e6';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+});
+
+function makeIconSprite(texture) {
+  const mat = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false, depthWrite: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(22, 22, 1);
+  sprite.renderOrder = 10;
+  return sprite;
+}
+
 // ── PowerUp (disparo triple) ──────────────────────────────────────────────────
 const powerUpGeo = new THREE.OctahedronGeometry(10, 0);
 const powerUpMat = new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x00aaaa, roughness: 0.4 });
@@ -265,7 +359,12 @@ class PowerUp {
     this.ttl = 12;
     this.dead = false;
 
-    this.mesh = new THREE.Mesh(powerUpGeo, powerUpMat);
+    this.mesh = new THREE.Group();
+    this.gem = new THREE.Mesh(powerUpGeo, powerUpMat);
+    this.mesh.add(this.gem);
+    this.icon = makeIconSprite(tripleIconTexture);
+    this.mesh.add(this.icon);
+
     placeMesh(this.mesh, this);
     scene.add(this.mesh);
   }
@@ -273,8 +372,9 @@ class PowerUp {
   update(dt) {
     this.ttl -= dt;
     if (this.ttl <= 0) this.dead = true;
-    this.mesh.rotation.y += dt * 2.4;
-    this.mesh.rotation.x += dt * 1.1;
+    this.gem.rotation.y += dt * 2.4;
+    this.gem.rotation.x += dt * 1.1;
+    this.icon.material.rotation += dt * 1.1;
     this.mesh.visible = !(this.ttl < 3 && Math.floor(this.ttl * 8) % 2 === 0);
     placeMesh(this.mesh, this);
   }
@@ -295,7 +395,12 @@ class NovaPickup {
     this.ttl = 14;
     this.dead = false;
 
-    this.mesh = new THREE.Mesh(novaGeo, novaMat);
+    this.mesh = new THREE.Group();
+    this.gem = new THREE.Mesh(novaGeo, novaMat);
+    this.mesh.add(this.gem);
+    this.icon = makeIconSprite(novaIconTexture);
+    this.mesh.add(this.icon);
+
     placeMesh(this.mesh, this);
     scene.add(this.mesh);
   }
@@ -303,8 +408,9 @@ class NovaPickup {
   update(dt) {
     this.ttl -= dt;
     if (this.ttl <= 0) this.dead = true;
-    this.mesh.rotation.y += dt * 1.6;
-    this.mesh.rotation.x += dt * 2.1;
+    this.gem.rotation.y += dt * 1.6;
+    this.gem.rotation.x += dt * 2.1;
+    this.icon.material.rotation -= dt * 1.4;
     const pulse = 1 + Math.sin(this.ttl * 6) * 0.08;
     this.mesh.scale.setScalar(pulse);
     this.mesh.visible = !(this.ttl < 3 && Math.floor(this.ttl * 8) % 2 === 0);
@@ -728,10 +834,8 @@ const MAP_RANGE  = 320; // radio en unidades lógicas que abarca el radar
 // Usa la distancia más corta considerando que el mundo da la vuelta
 // (toroidal) para que los asteroides que "envuelven" el borde no salgan mal.
 function projectToMap(x, z) {
-  let dx = x - ship.x;
-  let dz = z - ship.z;
-  if (dx > W / 2) dx -= W; else if (dx < -W / 2) dx += W;
-  if (dz > H / 2) dz -= H; else if (dz < -H / 2) dz += H;
+  const dx = x - ship.x;
+  const dz = z - ship.z;
 
   const cosA = Math.cos(ship.angle), sinA = Math.sin(ship.angle);
   const forward = dx * cosA + dz * sinA;

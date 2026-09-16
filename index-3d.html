@@ -8,17 +8,46 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
       background: #000;
-      height: 100%;
-      overflow: hidden;
+      min-height: 100%;
       font-family: monospace;
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 10px 0;
+      overflow-x: hidden;
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .topbar h1 {
+      color: #fff;
+      font-size: 22px;
+      letter-spacing: 4px;
+      font-weight: normal;
+    }
+    .switch-btn {
+      color: #fff;
+      text-decoration: none;
+      border: 1px solid rgba(255,255,255,0.5);
+      padding: 8px 14px;
+      font-size: 13px;
+      letter-spacing: 1px;
+      transition: background 0.15s, color 0.15s;
+    }
+    .switch-btn:hover {
+      background: #fff;
+      color: #000;
     }
     #container {
       position: relative;
       width: 900px;
       height: 700px;
-      margin: 0 auto;
-      top: 50%;
-      transform: translateY(-50%);
     }
     canvas { display: block; border: 1px solid #222; }
 
@@ -134,6 +163,10 @@
   </style>
 </head>
 <body>
+  <div class="topbar">
+    <h1>ASTEROIDS 3D</h1>
+    <a class="switch-btn" href="index.html">← JUGAR VERSIÓN CLÁSICA</a>
+  </div>
   <div id="container">
     <div id="hud">
       <div class="score">SCORE 0</div>
